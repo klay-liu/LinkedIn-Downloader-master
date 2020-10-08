@@ -57,7 +57,6 @@ class Browser:
     @staticmethod
     def check_login(driver):
         page_source = driver.page_source
-        driver.save_screenshot('login_page.png')
         if 'You’ve got this! Start learning to reach your goal.' in page_source:
             print('Log in sucess!')
             return True
@@ -172,11 +171,11 @@ class Course(Browser):
         :param video_title_list: a list for video title
         :return: video_links - a list
         """
-        punctuation_pattern = "[.,\/#!$%\&\*;:{}=\_`~()']"
+        punctuation_pattern = "[.,#!$%&*;:{}=_`~()']"
         video_links = []
         for title in video_title_list:
             title = re.sub(punctuation_pattern,'',title.lower())
-            title = re.sub('\s+', '-', title)
+            title = re.sub("[\s+/']", '-', title)
             video_link = course_link+'/'+title
             video_links.append(video_link)
         return video_links
@@ -189,22 +188,45 @@ class Course(Browser):
         video_src_link = soup.select('video')[0].get('src')
         return video_src_link
 
-    def download_video(self,video_link,video_src_link):
+    @staticmethod
+    def create_course_dir(course_name, video_title_list):
+        # saved_directory = os.path.join(os.path.expanduser('~'), 'Downloads')
+        directory_list = []
+        course_dir = os.path.abspath(os.path.join(saved_directory, course_name))
+        for t in video_title_list:
+            video_file = '{}.mp4'.format(t)
+            if len(t[:3].strip().strip('.')) == 1:
+                if not os.path.exists(course_dir):
+                    os.mkdir(course_dir)
+                if not os.path.exists(os.path.join(course_dir, t)):
+                    os.mkdir(os.path.join(course_dir, t))
+                os.chdir(os.path.join(course_dir, t))
+                continue
+            video_abs_path = os.path.join(os.getcwd(), video_file)
+            directory_list.append(video_abs_path)
+        return directory_list
 
+    def download_video(self,video_title_list,video_link,video_src_link):
+        global saved_directory
+        saved_directory = os.path.join(os.path.expanduser('~'), 'Downloads')
         course_name = video_link.split('/')[-2].replace('-', ' ').title()
-        course_dir = os.path.abspath(os.path.join(os.getcwd(), course_name))
-        if not os.path.exists(course_dir):
-            os.mkdir(course_dir)
-        video_file = '{}.mp4'.format(video_link.replace('?u=750*****','').split('/')[-1].replace('-', ' ').title()) # modify this line where '?u=750*****' (750*****': is kind of your userid)
-        video_abs_path = os.path.join(course_dir, video_file)
+        # course_dir = os.path.abspath(os.path.join(saved_directory, course_name))
+        # if not os.path.exists(course_dir):
+        #     os.mkdir(course_dir)
+        video_abspath_list = self.create_course_dir(course_name,video_title_list)
+        video_name = video_link.split('?')[0].split('/')[-1].replace('-', ' ')
+        video_abspath = [v for v in video_abspath_list if video_name in v.lower()][0]
+
+        # video_file = '{}.mp4'.format(video_link.split('?')[0].split('/')[-1].replace('-', ' ').title())
+        # video_abs_path = os.path.join(course_dir, video_file)
         sess = requests.Session()
         sess.headers = self.headers
         cookies = self.cookies
         for cookie in cookies:
             sess.cookies.set(cookie['name'], cookie['value'])
         r = sess.get(video_src_link, stream=True)
-        if not os.path.isfile(video_abs_path): # pass the code if the video downloaded!
-            with open(video_abs_path, 'wb') as f:
+        if not os.path.isfile(video_abspath): # pass the code if the video downloaded!
+            with open(video_abspath, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=256):
                     if chunk:
                         f.write(chunk)
@@ -214,23 +236,26 @@ def main():
     all_courses = course.all_courses
 
     for crs_link in all_courses:
+        course_name = crs_link.split('/')[-1].replace('-', ' ').title()
         crs_pagesource = course.get_course_html(crs_link)
         soup = course.get_soup(crs_pagesource)
         video_titles = course.get_title(soup,type='video')
+        video_chapter_titles = course.get_title(soup)
         video_links = course.get_video_link(crs_link,video_titles)
-
         for video_link in video_links:
             try:
                 video_pagesource = course.get_course_html(video_link)
                 video_src_link = course.get_video_src(video_pagesource)
                 if video_src_link:
-                    course.download_video(video_link,video_src_link)
+                    course.download_video(video_chapter_titles,video_link,video_src_link)
                 else:
                     print('Failed to get the src link..')
             except:
-                print('Incorrect video_link...')
+                print('Incorrect video_link')
                 error_video_title.append(video_link)
                 pass
+        with open(os.path.join(saved_directory,course_name,'Error for {}.txt'.format(course_name)), 'w') as f:
+            f.write(str(error_video_title))
 
 if __name__ == '__main__':
     main()
