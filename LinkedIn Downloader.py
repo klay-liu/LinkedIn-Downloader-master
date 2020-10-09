@@ -6,7 +6,6 @@ from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
 
-
 driver = ''
 
 
@@ -19,6 +18,7 @@ class Browser:
         self.chrome_driver_path = os.getcwd() + "\\chromedriver.exe"
         self.chrome_options = None
         self.url = 'https://www.linkedin.com/learning/'
+
     @staticmethod
     def kill_chrome():
         print('The chrome will be closed..')
@@ -96,6 +96,14 @@ class Course(Browser):
             self.driver.add_cookie(cookie)
         return self.driver
 
+    def create_session(self):
+        sess = requests.Session()
+        sess.headers = self.headers
+        cookies = self.cookies
+        for cookie in cookies:
+            sess.cookies.set(cookie['name'], cookie['value'])
+        return sess
+
     @staticmethod
     def get_course_link():
         all_courses = []
@@ -123,22 +131,23 @@ class Course(Browser):
         :param type: [video, chapter, chapter_and_video]. Default value is None - chapter_and_video title will be returned.
         :return: title for the input type
         """
-        if type==None or type == 'chapter_and_video':
+        if type == None or type == 'chapter_and_video':
 
             # soup = BeautifulSoup(html, 'html.parser')
-            chapter_sections = soup.find_all('section',{'class': 'classroom-toc-chapter ember-view'})
+            chapter_sections = soup.find_all('section', {'class': 'classroom-toc-chapter ember-view'})
             titles_mix = []
             chapter_video_title = []
             for chapter_section in chapter_sections:
-                titles_mix.append(chapter_section.get_text().replace('\n','').strip()) # get the chapter text
+                titles_mix.append(chapter_section.get_text().replace('\n', '').strip())  # get the chapter text
             for title in titles_mix:
-            #     print(title)
+                #     print(title)
                 re_pattern = re.compile(r'\d+m\s\d+s|\d+s|\(.*?\)|\d+\squestions|\d\squestion|Chapter\sQuiz')
-                target_title = re.sub(re_pattern,'',title.strip()).split('  ')
-                target_title = [s.strip() for s in target_title if s!='']
-                target_title = [s for s in target_title if s!='']
-                target_title_final = [target_title[0][0]+'.'+str(id)+' '+s if not s[0].isdigit() else s for id,s in enumerate(target_title)]
-            #     print(target_title_final)
+                target_title = re.sub(re_pattern, '', title.strip()).split('  ')
+                target_title = [s.strip() for s in target_title if s != '']
+                target_title = [s for s in target_title if s != '']
+                target_title_final = [target_title[0][0] + '.' + str(id) + ' ' + s if not s[0].isdigit() else s for
+                                      id, s in enumerate(target_title)]
+                #     print(target_title_final)
                 chapter_video_title.extend(target_title_final)
             return chapter_video_title
         if type == 'chapter':
@@ -162,7 +171,6 @@ class Course(Browser):
             video_titles.extend(video_title)
             return video_titles
 
-
     @staticmethod
     def get_video_link(course_link, video_title_list):
         """
@@ -174,9 +182,9 @@ class Course(Browser):
         punctuation_pattern = "[.,#!$%&*;:{}=_`~()']"
         video_links = []
         for title in video_title_list:
-            title = re.sub(punctuation_pattern,'',title.lower())
+            title = re.sub(punctuation_pattern, '', title.lower())
             title = re.sub("[\s+/']", '-', title)
-            video_link = course_link+'/'+title
+            video_link = course_link + '/' + title
             video_links.append(video_link)
         return video_links
 
@@ -189,11 +197,9 @@ class Course(Browser):
         return video_src_link
 
     @staticmethod
-    def create_course_dir(course_name, video_title_list):
-        # saved_directory = os.path.join(os.path.expanduser('~'), 'Downloads')
+    def create_course_dir(video_chapter_titles):
         directory_list = []
-        course_dir = os.path.abspath(os.path.join(saved_directory, course_name))
-        for t in video_title_list:
+        for t in video_chapter_titles:
             video_file = '{}.mp4'.format(t)
             if len(t[:3].strip().strip('.')) == 1:
                 if not os.path.exists(course_dir):
@@ -206,56 +212,96 @@ class Course(Browser):
             directory_list.append(video_abs_path)
         return directory_list
 
-    def download_video(self,video_title_list,video_link,video_src_link):
-        global saved_directory
-        saved_directory = os.path.join(os.path.expanduser('~'), 'Downloads')
-        course_name = video_link.split('/')[-2].replace('-', ' ').title()
-        # course_dir = os.path.abspath(os.path.join(saved_directory, course_name))
-        # if not os.path.exists(course_dir):
-        #     os.mkdir(course_dir)
-        video_abspath_list = self.create_course_dir(course_name,video_title_list)
+    def download_video(self, video_abspath_list, video_link, video_src_link):
         video_name = video_link.split('?')[0].split('/')[-1].replace('-', ' ')
         video_abspath = [v for v in video_abspath_list if video_name in v.lower()][0]
-
-        # video_file = '{}.mp4'.format(video_link.split('?')[0].split('/')[-1].replace('-', ' ').title())
-        # video_abs_path = os.path.join(course_dir, video_file)
-        sess = requests.Session()
-        sess.headers = self.headers
-        cookies = self.cookies
-        for cookie in cookies:
-            sess.cookies.set(cookie['name'], cookie['value'])
+        sess = self.create_session()
         r = sess.get(video_src_link, stream=True)
-        if not os.path.isfile(video_abspath): # pass the code if the video downloaded!
+        if not os.path.isfile(video_abspath):  # pass the code if the video downloaded!
             with open(video_abspath, 'wb') as f:
                 for chunk in r.iter_content(chunk_size=256):
                     if chunk:
                         f.write(chunk)
+
+    def download_exercise_files(self, course_link, course_name):
+        driver = self.add_previous_cookies
+        js = """
+        document.querySelector('button[aria-label="See all exercise files"]').click(); 
+        var urls = [], ex_file_ele = document.getElementsByClassName('ember-view classroom-exercise-files-modal__exercise-file-download artdeco-button artdeco-button--secondary');
+        for (var i = 0; i < ex_file_ele.length; i++) {
+	    urls[urls.length] = ex_file_ele[i].href;
+	    };
+        document.querySelector('button[aria-label="Dismiss"]').click();
+        return urls;
+        """
+        driver.get(course_link)
+        ex_file_links = driver.execute_script(js)
+        if len(ex_file_links) == 1:
+            session = self.create_session()
+            r = session.get(ex_file_links[0], stream=True)
+            if not os.path.exists(course_dir):
+                os.mkdir(course_dir)
+            if not os.path.isfile(os.path.join(course_dir, "{}.zip".format(course_name))):
+                with open(os.path.join(course_dir, "{}.zip".format(course_name)), 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=256):
+                        if chunk:
+                            f.write(chunk)
+        else:
+            count = 1
+            for each_file_link in ex_file_links:
+                session = self.create_session()
+                r = session.get(each_file_link, stream=True)
+                if not os.path.exists(course_dir):
+                    os.mkdir(course_dir)
+                with open(os.path.join(course_dir, "{} - {}.zip".format(course_name, count)), 'wb') as f:
+                    for chunk in r.iter_content(chunk_size=256):
+                        if chunk:
+                            f.write(chunk)
+                count += 1
+
+
 def main():
+    global saved_directory
+    global course_dir
+    saved_directory = os.path.join(os.path.expanduser('~'), 'Downloads')
     error_video_title = []
     course = Course()
     all_courses = course.all_courses
 
     for crs_link in all_courses:
+
         course_name = crs_link.split('/')[-1].replace('-', ' ').title()
+        course_dir = os.path.abspath(os.path.join(saved_directory, course_name))
+        # download the exercise files
+        try:
+            course.download_exercise_files(crs_link, course_name)
+        except:
+            print('Exercise files were not found')
+            pass
         crs_pagesource = course.get_course_html(crs_link)
         soup = course.get_soup(crs_pagesource)
-        video_titles = course.get_title(soup,type='video')
-        video_chapter_titles = course.get_title(soup)
-        video_links = course.get_video_link(crs_link,video_titles)
+        video_titles = course.get_title(soup, type='video')  # collect the video titles
+        video_chapter_titles = course.get_title(soup)  # collect the video titles with chapter by order
+        video_abspath_list = course.create_course_dir(course_name,
+                                                      video_chapter_titles)  # create directories with all ordered video file names
+        video_links = course.get_video_link(crs_link,
+                                            video_titles)  # generate the video links like https://www.linkedin.com/learning/statistics-foundations-2/next-steps
+
         for video_link in video_links:
             try:
                 video_pagesource = course.get_course_html(video_link)
                 video_src_link = course.get_video_src(video_pagesource)
                 if video_src_link:
-                    course.download_video(video_chapter_titles,video_link,video_src_link)
+                    course.download_video(video_abspath_list, video_link, video_src_link)
                 else:
                     print('Failed to get the src link..')
             except:
                 print('Incorrect video_link')
                 error_video_title.append(video_link)
                 pass
-        with open(os.path.join(saved_directory,course_name,'Error for {}.txt'.format(course_name)), 'w') as f:
+        with open(os.path.join(saved_directory, course_name, 'Error for {}.txt'.format(course_name)), 'w') as f:
             f.write(str(error_video_title))
+
 
 if __name__ == '__main__':
     main()
