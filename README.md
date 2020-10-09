@@ -4,6 +4,7 @@ LindIn-Learning-Downloader is a mini program that I personally researched how to
 It uses a combination of Selenium and Requests two Python libraries.
 
 Selenium: Sign In the linkedin learning by getting the cookies
+
 Requests: Download the videos
 
 
@@ -15,9 +16,14 @@ Requests: Download the videos
 
 <b>3. Sign In LinkedIn Learning in Chrome.</b>
 
-<b>4. Run the LinkedIn Downloader.py. If needed, modify the video_link line.</b>
+<b>4. Run the LinkedIn Downloader.py.</b>
 
 That's all you need to do.
 
+#### Next Steps
+
+1. Fix the bugs that some of the videos were not downloaded successfully
+2. Add the functionality -  'download exercise files'
+3. Add the functionality -  'download the transcript' 
 
 
