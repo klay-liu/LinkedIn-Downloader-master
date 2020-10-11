@@ -136,10 +136,10 @@ class Course(Browser):
         for chapter_section in chapter_sections:
             titles_mix.append(chapter_section.get_text().replace('\n', '').strip())  # get the chapter text
         for idx, title in enumerate(titles_mix):
-            re_pattern = re.compile(r'\d+m\s\d+s|\d+s|\([VI].*?\)|\d+\squestions|\d\squestion|Chapter\sQuiz')
-            target_title = re.sub(re_pattern, '', title.strip()).split('  ')
+            re_pattern = re.compile(r'\d+m\s\d+s|\d+s|\d+m|\([VI].*?\)|\d+\squestions|\d\squestion|Chapter\sQuiz')
+            target_title = re.sub(re_pattern, '', title.strip()).split('   ')
             target_title = [s.strip() for s in target_title if s != '']
-            target_title = [re.sub("[:?]", '', s) for s in target_title if s != '']
+            target_title = [re.sub("[(),:?]", '', s).replace('/', '-') for s in target_title if s != '']
             # add no. for the introduction and conclusion chapter
             if target_title[0].lower() in ['introduction', 'conclusion']:
                 target_title[0] = str(idx)+'. ' + target_title[0]
@@ -237,7 +237,7 @@ class Course(Browser):
     def download_exercise_files(self, course_link, course_name):
         driver = self.add_previous_cookies
         js = """
-        document.querySelector('button[aria-label="See all exercise files"]').click(); 
+        document.querySelector('button[aria-label$="exercise files"]').click(); 
         var urls = [], ex_file_ele = document.getElementsByClassName('ember-view classroom-exercise-files-modal__exercise-file-download artdeco-button artdeco-button--secondary');
         for (var i = 0; i < ex_file_ele.length; i++) {
 	    urls[urls.length] = ex_file_ele[i].href;
