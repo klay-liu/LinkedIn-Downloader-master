@@ -124,69 +124,46 @@ class Course(Browser):
         return soup
 
     @staticmethod
-    def get_title(soup, type=None):
+    def get_title(soup):
         """
 
         :param soup: BeautifulSoup Object
-        :param type: [video, chapter, chapter_and_video]. Default value is None - chapter_and_video title will be returned.
         :return: title for the input type
         """
-        if type == None or type == 'chapter_and_video':
+        chapter_sections = soup.find_all('section', {'class': 'classroom-toc-chapter ember-view'})
+        titles_mix = []
+        chapter_video_title = []
+        for chapter_section in chapter_sections:
+            titles_mix.append(chapter_section.get_text().replace('\n', '').strip())  # get the chapter text
+        for idx, title in enumerate(titles_mix):
+            re_pattern = re.compile(r'\d+m\s\d+s|\d+s|\([VI].*?\)|\d+\squestions|\d\squestion|Chapter\sQuiz')
+            target_title = re.sub(re_pattern, '', title.strip()).split('  ')
+            target_title = [s.strip() for s in target_title if s != '']
+            target_title = [re.sub("[:?]", '', s) for s in target_title if s != '']
+            # add no. for the introduction and conclusion chapter
+            if target_title[0].lower() in ['introduction', 'conclusion']:
+                target_title[0] = str(idx)+'. ' + target_title[0]
+            target_title_final = [target_title[0][0] + '.' + str(id) + ' ' + s if not s[0].isdigit() else s for
+                                  id, s in enumerate(target_title)]
+            #     print(target_title_final)
+            chapter_video_title.extend(target_title_final)
+        return chapter_video_title
 
-            # soup = BeautifulSoup(html, 'html.parser')
-            chapter_sections = soup.find_all('section', {'class': 'classroom-toc-chapter ember-view'})
-            titles_mix = []
-            chapter_video_title = []
-            for chapter_section in chapter_sections:
-                titles_mix.append(chapter_section.get_text().replace('\n', '').strip())  # get the chapter text
-            for title in titles_mix:
-                #     print(title)
-                re_pattern = re.compile(r'\d+m\s\d+s|\d+s|\(.*?\)|\d+\squestions|\d\squestion|Chapter\sQuiz')
-                target_title = re.sub(re_pattern, '', title.strip()).split('  ')
-                target_title = [s.strip() for s in target_title if s != '']
-                target_title = [s for s in target_title if s != '']
-                target_title_final = [target_title[0][0] + '.' + str(id) + ' ' + s if not s[0].isdigit() else s for
-                                      id, s in enumerate(target_title)]
-                #     print(target_title_final)
-                chapter_video_title.extend(target_title_final)
-            return chapter_video_title
-        if type == 'chapter':
-            chapter_titles = soup.find_all('span', {'class': "classroom-toc-chapter__toggle-title t-14 t-bold t-white"})
-            chapter_titles_ol = []
-            for id, chapter_title in enumerate(chapter_titles):
-                if not chapter_title.contents[0].strip()[0].isdigit():
-                    chapter_titles_ol.append(str(id) + '. ' + chapter_title.contents[0].strip())
-                else:
-                    chapter_titles_ol.append(chapter_title.contents[0].strip())
-
-            return chapter_titles_ol
-        if type == 'video':
-            video_titles = []
-            title_with_rmv = []
-            re_pattern = re.compile(r'\d+m\s\d+s|\d+s|\(.*?\)|\d+\squestions|\d\squestion|Chapter\sQuiz')
-            video_class = soup.find_all('div', {'class': 'classroom-toc-item__title t-14 t-white'})
-            for vdo in video_class:
-                title_with_rmv.append(re.sub(re_pattern, '', vdo.contents[0].strip()))
-            video_title = [s.strip() for s in title_with_rmv if s != '']
-            video_titles.extend(video_title)
-            return video_titles
 
     @staticmethod
-    def get_video_link(course_link, video_title_list):
+    def get_video_link(course_link, video_abspath):
         """
 
         :param course_link: link like 'https://www.linkedin.com/learning/learning-data-analytics-2'
-        :param video_title_list: a list for video title
-        :return: video_links - a list
+        :param video_abspath: abspath for video
+        :return: video_link - a link
         """
-        punctuation_pattern = "[.,#!$%&*;:{}=_`~()']"
-        video_links = []
-        for title in video_title_list:
-            title = re.sub(punctuation_pattern, '', title.lower())
-            title = re.sub("[\s+/']", '-', title)
-            video_link = course_link + '/' + title
-            video_links.append(video_link)
-        return video_links
+        punctuation_pattern = "[.,#!$%&*;:{}=_`~()?]"
+        title = re.sub(r"^\d+\.\d+|\.mp4",'',video_abspath.split('\\')[-1]).strip().lower()
+        title = re.sub(punctuation_pattern, '', title.lower())
+        title = re.sub("\s-\s|[\s+']", '-', title)
+        video_link = course_link + '/' + title
+        return video_link
 
     @staticmethod
     def get_video_src(html):
@@ -195,6 +172,40 @@ class Course(Browser):
         soup = BeautifulSoup(html, 'html.parser')
         video_src_link = soup.select('video')[0].get('src')
         return video_src_link
+
+    @staticmethod
+    def format_sub_time(ms):
+        seconds, milliseconds = divmod(ms, 1000)
+        minutes, seconds = divmod(seconds, 60)
+        hours, minutes = divmod(minutes, 60)
+        return f'{hours:02}:{minutes:02}:{seconds:02}:{milliseconds:02}'
+
+    @staticmethod
+    def get_video_subs(soup):
+        response = soup.text
+        start_at = re.findall('"transcriptStartAt":(\d+),', response)
+        start_at = [int(i) for i in start_at]
+        duration = int(re.findall('"duration":(\d{5,10}),', response)[0])
+        end_at = [start_at[i] for i in range(1, len(start_at))]
+        end_at.append(duration)
+        caption = re.findall('"caption":"(.*?)"', response)
+        return start_at, end_at, caption
+
+    def create_sub_lines(self, idx, start_at, end_at, caption):
+        return f'{idx}\n' \
+            f'{self.format_sub_time(start_at)} --> {self.format_sub_time(end_at)}\n' \
+            f'{caption}\n\n'
+
+    def write_subtitles(self, srt_abspath, start_at, end_at, caption):
+        if os.path.isfile(srt_abspath):
+            try:
+                os.remove(srt_abspath)
+            except OSError:
+                pass
+        for id, sub in enumerate(zip(start_at, end_at, caption), start=1):
+            sub_line = self.create_sub_lines(id, sub[0], sub[1], sub[2])
+            with open(srt_abspath, 'ab') as f:
+                f.write(sub_line.encode('utf-8'))
 
     @staticmethod
     def create_course_dir(video_chapter_titles):
@@ -212,9 +223,9 @@ class Course(Browser):
             directory_list.append(video_abs_path)
         return directory_list
 
-    def download_video(self, video_abspath_list, video_link, video_src_link):
-        video_name = video_link.split('?')[0].split('/')[-1].replace('-', ' ')
-        video_abspath = [v for v in video_abspath_list if video_name in v.lower()][0]
+    def download_video(self, video_abspath, video_src_link):
+        # video_name = video_link.split('?')[0].split('/')[-1].replace('-', ' ')
+        # video_abspath = [v for v in video_abspath_list if video_name[:8] in re.sub("[.,#!$%&*;:{}=_`~()?]",'',v.lower())][0]
         sess = self.create_session()
         r = sess.get(video_src_link, stream=True)
         if not os.path.isfile(video_abspath):  # pass the code if the video downloaded!
@@ -259,7 +270,6 @@ class Course(Browser):
                             f.write(chunk)
                 count += 1
 
-
 def main():
     global saved_directory
     global course_dir
@@ -280,25 +290,36 @@ def main():
             pass
         crs_pagesource = course.get_course_html(crs_link)
         soup = course.get_soup(crs_pagesource)
-        video_titles = course.get_title(soup, type='video')  # collect the video titles
+        # video_titles = course.get_title(soup, type='video')  # collect the video titles
         video_chapter_titles = course.get_title(soup)  # collect the video titles with chapter by order
-        video_abspath_list = course.create_course_dir(course_name,
-                                                      video_chapter_titles)  # create directories with all ordered video file names
-        video_links = course.get_video_link(crs_link,
-                                            video_titles)  # generate the video links like https://www.linkedin.com/learning/statistics-foundations-2/next-steps
-
-        for video_link in video_links:
-            try:
-                video_pagesource = course.get_course_html(video_link)
-                video_src_link = course.get_video_src(video_pagesource)
-                if video_src_link:
-                    course.download_video(video_abspath_list, video_link, video_src_link)
-                else:
-                    print('Failed to get the src link..')
-            except:
-                print('Incorrect video_link')
+        video_abspath_list = course.create_course_dir(video_chapter_titles)  # create directories with all ordered video file names
+        for video_abspath in video_abspath_list:
+            video_link = course.get_video_link(crs_link, video_abspath)  # generate the video link like https://www.linkedin.com/learning/statistics-foundations-2/next-steps
+            video_pagesource = course.get_course_html(video_link)
+            if 'Page not found' in video_pagesource:
+                print('Incorrect video link: {}\n'.format(video_link))
                 error_video_title.append(video_link)
-                pass
+                continue
+            else:
+                try:
+                    video_src_link = course.get_video_src(video_pagesource)
+                    if video_src_link:
+                        course.download_video(video_abspath, video_src_link)
+                    else:
+                        print('Failed to get the src link..')
+
+                except:
+                    pass
+                try:
+                    srt_abspath = video_abspath.replace('mp4','srt')
+                    video_soup = course.get_soup(video_pagesource)
+                    subs_tuple = course.get_video_subs(video_soup)
+                    start_at, end_at, caption = subs_tuple[0], subs_tuple[1], subs_tuple[2]
+                    course.write_subtitles(srt_abspath, start_at, end_at, caption)
+                except:
+                    print('Unable to write subtitles')
+                    pass
+
         with open(os.path.join(saved_directory, course_name, 'Error for {}.txt'.format(course_name)), 'w') as f:
             f.write(str(error_video_title))
 
