@@ -178,7 +178,7 @@ class Course(Browser):
         seconds, milliseconds = divmod(ms, 1000)
         minutes, seconds = divmod(seconds, 60)
         hours, minutes = divmod(minutes, 60)
-        return f'{hours:02}:{minutes:02}:{seconds:02}:{milliseconds:02}'
+        return f'{hours:02}:{minutes:02}:{seconds:02},{milliseconds:02}'
 
     @staticmethod
     def get_video_subs(soup):
