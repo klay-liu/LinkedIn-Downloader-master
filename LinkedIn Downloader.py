@@ -139,7 +139,7 @@ class Course(Browser):
             re_pattern = re.compile(r'\d+m\s\d+s|\d+s|\d+m|\([VI].*?\)|\d+\squestions|\d\squestion|Chapter\sQuiz')
             target_title = re.sub(re_pattern, '', title.strip()).split('   ')
             target_title = [s.strip() for s in target_title if s != '']
-            target_title = [re.sub("[(),:?]", '', s).replace('/', '-') for s in target_title if s != '']
+            target_title = [re.sub("[(),:?]", '', s).replace('/', '-').replace('  ',' ') for s in target_title if s != '']
             # add no. for the introduction and conclusion chapter
             if target_title[0].lower() in ['introduction', 'conclusion']:
                 target_title[0] = str(idx)+'. ' + target_title[0]
