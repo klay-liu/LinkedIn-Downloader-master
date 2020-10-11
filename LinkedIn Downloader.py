@@ -57,7 +57,7 @@ class Browser:
     @staticmethod
     def check_login(driver):
         page_source = driver.page_source
-        if 'You’ve got this! Start learning to reach your goal.' in page_source:
+        if 'Weekly goal' in page_source:
             print('Log in sucess!')
             return True
         else:
