@@ -20,10 +20,3 @@ Requests: Download the videos
 
 That's all you need to do.
 
-#### Next Steps
-
-1. Fix the bugs that some of the videos were not downloaded successfully
-2. Add the functionality -  'download exercise files'
-3. Add the functionality -  'download the transcript' 
-
-
