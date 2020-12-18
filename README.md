@@ -1,6 +1,6 @@
-### LindIn-Learning-Downloader
+### LinkedIn-Learning-Downloader
 
-LindIn-Learning-Downloader is a mini program that I personally researched how to download linkedin learning videos.
+LinkedIn-Learning-Downloader is a mini program that I personally researched how to download linkedin learning videos.
 It uses a combination of Selenium and Requests two Python libraries.
 
 Selenium: Sign In the linkedin learning by getting the cookies
