@@ -1,10 +1,18 @@
 import os
 import re
 import sys
+import logging
 import requests
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+from webdriver_manager.chrome import ChromeDriverManager
+
+# add logging block to log
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+logger.addHandler(logging.StreamHandler(sys.stdout))
 
 driver = ''
 
@@ -12,7 +20,7 @@ driver = ''
 class Browser:
     def __init__(self):
         global driver
-        self.headers = {'Referer': 'https://www.linkedin.com/learning/browse',
+        self.headers = {'Referer': 'https://www.linkedin.com/learning/',
                         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/85.0.4183.121 Safari/537.36'}
         self.chrome_user_data = os.getenv('LOCALAPPDATA') + r'\Google\Chrome\User Data'
         self.chrome_driver_path = os.getcwd() + "\\chromedriver.exe"
@@ -21,7 +29,7 @@ class Browser:
 
     @staticmethod
     def kill_chrome():
-        print('The chrome will be closed..')
+        logger.info('The chrome will be closed..')
         os.system('taskkill /f /im chromedriver.exe /t & taskkill /f /im chrome.exe /t')
 
     @property
@@ -47,8 +55,9 @@ class Browser:
         return self.chrome_options
 
     def initiate_chrome(self):
-        print('Opening Google Browser...')
-        driver = webdriver.Chrome(options=self.get_options, executable_path=self.chrome_driver_path)
+        logger.info('Opening Google Browser...')
+        # driver = webdriver.Chrome(options=self.get_options, executable_path=self.chrome_driver_path)
+        driver = webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=self.get_options) # compatible with latest selenium 4.0
         return driver
 
     def get_url(self, driver):
@@ -57,11 +66,11 @@ class Browser:
     @staticmethod
     def check_login(driver):
         page_source = driver.page_source
-        if 'Weekly goal' in page_source:
-            print('Log in sucess!')
+        if 'In progress' in page_source: # No weekly goal setting in the home page. So I take 'In progress' as the keyword to check whether login success.
+            logger.info('Log in sucess!')
             return True
         else:
-            print('Please try it again!')
+            logger.info('Please try it again!')
             return False
 
     @staticmethod
@@ -130,13 +139,15 @@ class Course(Browser):
         :param soup: BeautifulSoup Object
         :return: title for the input type
         """
-        chapter_sections = soup.find_all('section', {'class': 'classroom-toc-chapter ember-view'})
+        chapter_sections = soup.find_all('section', {'class': 'classroom-toc-section'}) # update the class name as the UI of Linkedin Learning has been changed
+        # chapter_sections = soup.find_all('section', {'class': 'classroom-toc-chapter ember-view'})
         titles_mix = []
         chapter_video_title = []
         for chapter_section in chapter_sections:
             titles_mix.append(chapter_section.get_text().replace('\n', '').strip())  # get the chapter text
         for idx, title in enumerate(titles_mix):
-            re_pattern = re.compile(r'\d+m\s\d+s|\d+s|\d+m|\([Vv]iewed.*?\)|\([Ii]n.*?[Pp]rogress\)|\d+\squestions|\d\squestion|Chapter\sQuiz')
+            # re_pattern = re.compile(r'\d+m\s\d+s|\d+s|\d+m|\([Vv]iewed.*?\)|\([Ii]n.*?[Pp]rogress\)|\d+\squestions|\d\squestion|Chapter\sQuiz')
+            re_pattern = re.compile(r'\d+m\s\d+s|\d+s|\d+m|\([Vv]iewed.*?\)|(Saved)|(Save)|\([Ii]n.*?[Pp]rogress\)|\d+\squestions|\d\squestion|Chapter\sQuiz')
             target_title = re.sub(re_pattern, '', title.strip()).split('   ')
             target_title = [s.strip() for s in target_title if s != '']
             target_title = [re.sub("[(),:?]", '', s).replace('/', '-').replace('  ',' ') for s in target_title if s != '']
@@ -145,8 +156,9 @@ class Course(Browser):
                 target_title[0] = str(idx)+'. ' + target_title[0]
             target_title_final = [target_title[0][0] + '.' + str(id) + ' ' + s if not s[0].isdigit() else s for
                                   id, s in enumerate(target_title)]
-            #     print(target_title_final)
+            #     logger.info(target_title_final)
             chapter_video_title.extend(target_title_final)
+        # logger.info(f'chapter_video_title')
         return chapter_video_title
 
 
@@ -163,6 +175,7 @@ class Course(Browser):
         title = re.sub(punctuation_pattern, '', title.lower())
         title = re.sub("\s-\s|[\s+']", '-', title)
         video_link = course_link + '/' + title
+        logger.info(f'video_link: {video_link}')
         return video_link
 
     @staticmethod
@@ -286,7 +299,7 @@ def main():
         try:
             course.download_exercise_files(crs_link, course_name)
         except:
-            print('Exercise files were not found')
+            logger.info('Exercise files were not found')
             pass
         crs_pagesource = course.get_course_html(crs_link)
         soup = course.get_soup(crs_pagesource)
@@ -297,7 +310,7 @@ def main():
             video_link = course.get_video_link(crs_link, video_abspath)  # generate the video link like https://www.linkedin.com/learning/statistics-foundations-2/next-steps
             video_pagesource = course.get_course_html(video_link)
             if 'Page not found' in video_pagesource:
-                print('Incorrect video link: {}\n'.format(video_link))
+                logger.info('Incorrect video link: {}\n'.format(video_link))
                 error_video_title.append(video_link)
                 continue
             else:
@@ -306,7 +319,7 @@ def main():
                     if video_src_link:
                         course.download_video(video_abspath, video_src_link)
                     else:
-                        print('Failed to get the src link..')
+                        logger.info('Failed to get the src link..')
 
                 except:
                     pass
@@ -317,11 +330,11 @@ def main():
                     start_at, end_at, caption = subs_tuple[0], subs_tuple[1], subs_tuple[2]
                     course.write_subtitles(srt_abspath, start_at, end_at, caption)
                 except:
-                    print('Unable to write subtitles')
+                    logger.info('Unable to write subtitles')
                     pass
 
-        with open(os.path.join(saved_directory, course_name, 'Error for {}.txt'.format(course_name)), 'w') as f:
-            f.write(str(error_video_title))
+        # with open(os.path.join(saved_directory, course_name, 'Error for {}.txt'.format(course_name)), 'w') as f:
+        #     f.write(str(error_video_title))
 
 
 if __name__ == '__main__':
